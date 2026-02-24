@@ -26,9 +26,14 @@ namespace AudioVisualizerOverlay
         private AudioProcessor? _audioProcessor;
         private WindowManager? _windowManager;
         private RadarVisualizer? _radarVisualizer;
+        
+        private int _maxBalls;
+        private bool _enableGunFilter;
 
-        public MainWindow()
+        public MainWindow(int maxBalls = 1, bool enableGunFilter = false)
         {
+            _maxBalls = maxBalls;
+            _enableGunFilter = enableGunFilter;
             InitializeComponent();
         }
 
@@ -83,7 +88,7 @@ namespace AudioVisualizerOverlay
         /// </summary>
         private void InitializeAudioProcessing()
         {
-            _audioProcessor = new AudioProcessor();
+            _audioProcessor = new AudioProcessor(_enableGunFilter);
 
             // Subscribe to audio data events
             _audioProcessor.AudioDataProcessed += OnAudioDataProcessed;
@@ -106,16 +111,15 @@ namespace AudioVisualizerOverlay
         /// </summary>
         private void InitializeVisualization()
         {
-            if (SoundDot == null)
+            if (RadarCanvas == null)
             {
-                Console.WriteLine("[MainWindow] ERROR: SoundDot element not found in XAML!");
-                MessageBox.Show("Critical Error: SoundDot element not found in XAML.", "Fatal Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Console.WriteLine("[MainWindow] ERROR: RadarCanvas element not found in XAML!");
+                MessageBox.Show("Critical Error: RadarCanvas element not found in XAML.", "Fatal Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
-            _radarVisualizer = new RadarVisualizer(SoundDot);
+            _radarVisualizer = new RadarVisualizer(RadarCanvas, _maxBalls);
             Console.WriteLine("[MainWindow] Visualization initialized successfully");
-            Console.WriteLine($"[MainWindow] SoundDot size: {SoundDot.Width}x{SoundDot.Height}");
         }
 
         /// <summary>
@@ -135,7 +139,7 @@ namespace AudioVisualizerOverlay
                     return;
                 }
 
-                _radarVisualizer.UpdateRadarDisplay(e.XForce, e.YForce, e.Loudness);
+                _radarVisualizer.UpdateRadarDisplay(e.Sources);
             });
         }
 

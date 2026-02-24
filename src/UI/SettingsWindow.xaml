@@ -1,0 +1,27 @@
+<Window x:Class="AudioVisualizerOverlay.src.UI.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Audio Radar Settings" Height="250" Width="300"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Audio Radar Configuration" FontWeight="Bold" FontSize="16" Margin="0,0,0,15" Grid.Row="0"/>
+
+        <StackPanel Grid.Row="1" Margin="0,0,0,10">
+            <TextBlock Text="Maximum Detected Sounds (1-5):" Margin="0,0,0,5"/>
+            <Slider Name="MaxBallsSlider" Minimum="1" Maximum="5" Value="1" TickFrequency="1" IsSnapToTickEnabled="True" TickPlacement="BottomRight"/>
+            <TextBlock Text="{Binding Value, ElementName=MaxBallsSlider}" HorizontalAlignment="Center"/>
+        </StackPanel>
+
+        <CheckBox Name="GunFilterCheckBox" Content="Enable Gunshot Filter (Experimental)" Grid.Row="2" Margin="0,0,0,15"/>
+
+        <Button Name="LaunchButton" Content="Launch Overlay" Height="30" Width="120" Grid.Row="4" Click="LaunchButton_Click"/>
+    </Grid>
+</Window>

@@ -1,33 +1,48 @@
 using NAudio.Wave;
+using NAudio.Dsp;
 using System;
+using System.Collections.Generic;
 
 namespace AudioVisualizerOverlay.src.Audio
 {
-    /// <summary>
-    /// Handles audio capture from system loopback and processes spatial audio data.
-    /// Extracts positional information (X, Y forces) and loudness from multi-channel audio.
-    /// </summary>
+    public class AudioSource
+    {
+        public int Id { get; set; }
+        public float XForce { get; set; }
+        public float YForce { get; set; }
+        public float Loudness { get; set; }
+    }
+
+    public class AudioDataEventArgs : EventArgs
+    {
+        public IEnumerable<AudioSource> Sources { get; }
+
+        public AudioDataEventArgs(IEnumerable<AudioSource> sources)
+        {
+            Sources = sources;
+        }
+    }
+
     public class AudioProcessor : IDisposable
     {
-        // Event fired when new audio data is processed
         public event EventHandler<AudioDataEventArgs>? AudioDataProcessed;
 
         private WasapiLoopbackCapture? _audioCapture;
         private bool _isRecording = false;
         private int _audioFrameCount = 0;
+        private bool _enableGunFilter;
 
-        /// <summary>
-        /// Initializes the audio processor and starts capturing system audio.
-        /// </summary>
-        /// <exception cref="InvalidOperationException">Thrown if audio capture cannot be started.</exception>
+        public AudioProcessor(bool enableGunFilter = false)
+        {
+            _enableGunFilter = enableGunFilter;
+        }
+
         public void InitializeAudioCapture()
         {
             try
             {
-                // Clean up any existing capture session
                 StopAudioCapture();
 
-                // Create new loopback capture (captures system audio output)
                 _audioCapture = new WasapiLoopbackCapture();
                 _audioCapture.DataAvailable += OnAudioDataAvailable;
                 _audioCapture.StartRecording();
@@ -41,9 +56,6 @@ namespace AudioVisualizerOverlay.src.Audio
             }
         }
 
-        /// <summary>
-        /// Stops the audio capture and releases resources.
-        /// </summary>
         public void StopAudioCapture()
         {
             if (_audioCapture != null)
@@ -55,107 +67,127 @@ namespace AudioVisualizerOverlay.src.Audio
             }
         }
 
-        /// <summary>
-        /// Handles raw audio data from the loopback capture.
-        /// Processes multi-channel audio to extract spatial positioning and loudness.
-        /// </summary>
         private void OnAudioDataAvailable(object? sender, WaveInEventArgs e)
         {
             if (_audioCapture == null || !_isRecording)
                 return;
 
-            // Extract spatial audio metrics from the raw audio buffer
-            (float xForce, float yForce, float loudness) = ProcessAudioBuffer(e.Buffer, e.BytesRecorded);
+            IEnumerable<AudioSource> sources = ProcessAudioBuffer(e.Buffer, e.BytesRecorded);
 
-            // Debug logging (first 5 frames)
             _audioFrameCount++;
             if (_audioFrameCount <= 5)
             {
-                Console.WriteLine($"[AudioProcessor] Frame {_audioFrameCount}: X={xForce:F6}, Y={yForce:F6}, Loudness={loudness:F6}");
+                Console.WriteLine($"[AudioProcessor] Frame {_audioFrameCount} processed.");
             }
 
-            // Trigger event for UI to consume the audio metrics
-            AudioDataProcessed?.Invoke(this, new AudioDataEventArgs(xForce, yForce, loudness));
+            AudioDataProcessed?.Invoke(this, new AudioDataEventArgs(sources));
         }
 
-        /// <summary>
-        /// Processes raw audio buffer to extract X-axis (left/right), Y-axis (front/back),
-        /// and loudness metrics based on multi-channel speaker configuration.
-        /// </summary>
-        /// <param name="buffer">Raw audio data buffer.</param>
-        /// <param name="bytesRecorded">Number of bytes in the buffer.</param>
-        /// <returns>Tuple of (xForce, yForce, loudness).</returns>
-        private (float xForce, float yForce, float loudness) ProcessAudioBuffer(byte[] buffer, int bytesRecorded)
+        private IEnumerable<AudioSource> ProcessAudioBuffer(byte[] buffer, int bytesRecorded)
         {
             var waveBuffer = new WaveBuffer(buffer);
             int channelCount = _audioCapture!.WaveFormat.Channels;
+            int sampleRate = _audioCapture.WaveFormat.SampleRate;
 
-            float aggregatedXForce = 0;
-            float aggregatedYForce = 0;
-            float aggregatedLoudness = 0;
-
-            // Process audio in frames (each frame contains one sample per channel)
-            int sampleCount = bytesRecorded / 4; // 4 bytes per float sample
+            int sampleCount = bytesRecorded / 4;
             int frameCount = sampleCount / channelCount;
+
+            if (_enableGunFilter && frameCount > 0)
+            {
+                if (!IsGunshot(waveBuffer.FloatBuffer, 0, frameCount, channelCount, sampleRate))
+                {
+                    return new List<AudioSource>(); // Filtered out
+                }
+            }
+
+            float avgFL = 0, avgFR = 0, avgFC = 0, avgBL = 0, avgBR = 0, avgSL = 0, avgSR = 0;
 
             for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
             {
-                // Calculate base position for this frame in the sample buffer
                 int bufferPosition = frameIndex * channelCount;
 
-                // Safely extract audio from each channel
-                // Standard speaker configuration: FL, FR, FC, LFE, BL, BR, SL, SR
-                float frontLeftChannel = ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 0, channelCount);
-                float frontRightChannel = ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 1, channelCount);
-                float frontCenterChannel = ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 2, channelCount);
-                float backLeftChannel = ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 4, channelCount);
-                float backRightChannel = ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 5, channelCount);
-                float sideLeftChannel = ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 6, channelCount);
-                float sideRightChannel = ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 7, channelCount);
-
-                // Calculate energy groups from speaker positions
-                float frontEnergy = frontLeftChannel + frontRightChannel + frontCenterChannel;
-                float backEnergy = backLeftChannel + backRightChannel;
-                float sideEnergy = sideLeftChannel + sideRightChannel;
-
-                // Y-AXIS: Front vs Back (determines forward/backward direction)
-                // Amplified back channel for more pronounced back detection
-                float yAxisForce = (backEnergy - frontEnergy) * 2.0f;
-
-                // X-AXIS: Left vs Right with weighted channel emphasis
-                // Back and side channels weighted higher for better directional accuracy
-                float leftWeightedEnergy = frontLeftChannel + (backLeftChannel * 3.0f) + (sideLeftChannel * 4.0f);
-                float rightWeightedEnergy = frontRightChannel + (backRightChannel * 3.0f) + (sideRightChannel * 4.0f);
-                float xAxisForce = rightWeightedEnergy - leftWeightedEnergy;
-
-                // Total loudness from all channels
-                float totalEnergy = frontEnergy + backEnergy + sideEnergy;
-
-                aggregatedXForce += xAxisForce;
-                aggregatedYForce += yAxisForce;
-                aggregatedLoudness += totalEnergy;
+                avgFL += ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 0, channelCount);
+                avgFR += ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 1, channelCount);
+                avgFC += ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 2, channelCount);
+                avgBL += ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 4, channelCount);
+                avgBR += ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 5, channelCount);
+                avgSL += ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 6, channelCount);
+                avgSR += ExtractChannelSafely(waveBuffer.FloatBuffer, bufferPosition, 7, channelCount);
             }
 
-            // Average the forces and loudness across all frames for stability
             if (frameCount > 0)
             {
-                aggregatedXForce /= frameCount;
-                aggregatedYForce /= frameCount;
-                aggregatedLoudness /= frameCount;
+                avgFL /= frameCount; avgFR /= frameCount; avgFC /= frameCount;
+                avgBL /= frameCount; avgBR /= frameCount;
+                avgSL /= frameCount; avgSR /= frameCount;
             }
 
-            return (aggregatedXForce, aggregatedYForce, aggregatedLoudness);
+            // 1. Store channels in radial order (clockwise)
+            // 0: FC, 1: FR, 2: SR, 3: BR, 4: BL, 5: SL, 6: FL
+            float[] E = new float[7] { avgFC, avgFR, avgSR, avgBR, avgBL, avgSL, avgFL };
+
+            // 2. Define unit vectors for each speaker direction (Y is up/negative)
+            (float x, float y)[] V = new (float, float)[7] {
+                (0f, -1f),          // 0: Front Center
+                (0.707f, -0.707f),  // 1: Front Right
+                (1f, 0f),           // 2: Side Right
+                (0.707f, 0.707f),   // 3: Back Right
+                (-0.707f, 0.707f),  // 4: Back Left
+                (-1f, 0f),          // 5: Side Left
+                (-0.707f, -0.707f)  // 6: Front Left
+            };
+
+            var sources = new List<AudioSource>();
+            float sBoost = 12.0f; // Adjusted sensitivity multiplier
+            float noiseThreshold = 0.00002f;
+
+            // 3. Find local peaks and calculate exact interpolated vector
+            for (int i = 0; i < 7; i++)
+            {
+                int prev = (i + 6) % 7;
+                int next = (i + 1) % 7;
+
+                // Local peak detection (strictly greater on one side prevents double-counting equal adjacent channels)
+                if (E[i] > noiseThreshold && E[i] >= E[prev] && E[i] > E[next])
+                {
+                    // Weighted vector sum of the peak and its immediate neighbors
+                    float vecX = (E[prev] * V[prev].x + E[i] * V[i].x + E[next] * V[next].x);
+                    float vecY = (E[prev] * V[prev].y + E[i] * V[i].y + E[next] * V[next].y);
+
+                    // Normalize the interpolated direction
+                    float mag = (float)Math.Sqrt(vecX * vecX + vecY * vecY);
+                    if (mag > 0)
+                    {
+                        vecX /= mag;
+                        vecY /= mag;
+                    }
+                    else
+                    {
+                        vecX = V[i].x;
+                        vecY = V[i].y;
+                    }
+
+                    // Apply magnitude (loudness)
+                    float forceMag = E[i] * sBoost;
+
+                    // Boost back channels slightly if they are naturally quieter
+                    if (i == 3 || i == 4) 
+                    {
+                        forceMag *= 1.5f;
+                    }
+
+                    sources.Add(new AudioSource { 
+                        Id = i, 
+                        XForce = vecX * forceMag, 
+                        YForce = vecY * forceMag, 
+                        Loudness = E[i] 
+                    });
+                }
+            }
+
+            return sources;
         }
 
-        /// <summary>
-        /// Safely extracts a channel value from the float buffer, preventing out-of-bounds access.
-        /// Returns 0 if the channel doesn't exist in the current audio configuration.
-        /// </summary>
-        /// <param name="floatBuffer">The audio float buffer.</param>
-        /// <param name="baseIndex">Starting index for current frame.</param>
-        /// <param name="channelIndex">Target channel index.</param>
-        /// <param name="maxChannels">Total available channels.</param>
-        /// <returns>Absolute value of the channel sample (0 if channel doesn't exist).</returns>
         private float ExtractChannelSafely(float[] floatBuffer, int baseIndex, int channelIndex, int maxChannels)
         {
             if (channelIndex >= maxChannels)
@@ -168,30 +200,52 @@ namespace AudioVisualizerOverlay.src.Audio
             return Math.Abs(floatBuffer[sampleIndex]);
         }
 
-        /// <summary>
-        /// Releases all resources held by the audio processor.
-        /// </summary>
+        private bool IsGunshot(float[] buffer, int start, int frameCount, int channelCount, int sampleRate)
+        {
+            int fftLength = 512;
+            int m = (int)Math.Log(fftLength, 2.0);
+            var complexBuffer = new Complex[fftLength];
+            
+            for (int i = 0; i < fftLength; i++)
+            {
+                if (i < frameCount && (start + i * channelCount) < buffer.Length)
+                {
+                    // Mix front left and right for analysis
+                    complexBuffer[i].X = buffer[start + i * channelCount]; 
+                }
+                else
+                {
+                    complexBuffer[i].X = 0;
+                }
+                complexBuffer[i].Y = 0;
+            }
+
+            // Apply FFT
+            FastFourierTransform.FFT(true, m, complexBuffer);
+
+            float lowEnergy = 0;
+            float midEnergy = 0; // 1kHz-4kHz is typical transient gun crack
+
+            for (int i = 1; i < fftLength / 2; i++)
+            {
+                double freq = (i * sampleRate) / (double)fftLength;
+                float mag = (float)Math.Sqrt(complexBuffer[i].X * complexBuffer[i].X + complexBuffer[i].Y * complexBuffer[i].Y);
+
+                if (freq < 1000)
+                    lowEnergy += mag;
+                else if (freq <= 4000)
+                    midEnergy += mag;
+            }
+
+            // Gunshots have significant transient hit in mid frequencies
+            // Wind / rumble is mostly lowEnergy
+            return midEnergy > (lowEnergy * 0.15f);
+        }
+
         public void Dispose()
         {
             StopAudioCapture();
             GC.SuppressFinalize(this);
-        }
-    }
-
-    /// <summary>
-    /// Event arguments for processed audio data (X position, Y position, loudness).
-    /// </summary>
-    public class AudioDataEventArgs : EventArgs
-    {
-        public float XForce { get; }
-        public float YForce { get; }
-        public float Loudness { get; }
-
-        public AudioDataEventArgs(float xForce, float yForce, float loudness)
-        {
-            XForce = xForce;
-            YForce = yForce;
-            Loudness = loudness;
         }
     }
 }

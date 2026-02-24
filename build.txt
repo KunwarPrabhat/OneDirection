@@ -1,0 +1,11 @@
+﻿  Determining projects to restore...
+  All projects are up-to-date for restore.
+C:\Users\rkpra\Desktop\TinyProj\OneDirection\OneDirection\src\UI\SettingsWindow.xaml.cs(6,43): error CS0118: 'Window' is a namespace but is used like a type [C:\Users\rkpra\Desktop\TinyProj\OneDirection\OneDirection\OneDirection.csproj]
+
+Build FAILED.
+
+C:\Users\rkpra\Desktop\TinyProj\OneDirection\OneDirection\src\UI\SettingsWindow.xaml.cs(6,43): error CS0118: 'Window' is a namespace but is used like a type [C:\Users\rkpra\Desktop\TinyProj\OneDirection\OneDirection\OneDirection.csproj]
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:01.02

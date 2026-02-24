@@ -9,7 +9,7 @@ It intercepts 7.1 Surround Sound audio data from the Windows mixer and visualize
 
 ---
 
-##  The Problem
+## The Problem
 
 In standard Stereo (2.0) gaming, a sound played at **50% Left / 50% Right** is mathematically ambiguous — it could be directly in front of you or directly behind you.
 
@@ -17,68 +17,78 @@ Games use HRTF (Head-Related Transfer Functions) to simulate spatial depth, but 
 
 ---
 
-##  The Solution
+## The Solution
 
-**AudioRadar** relies on a 7.1 Surround Sound pipeline.
+**AudioRadar** relies on a 7.1 Surround Sound pipeline using VB-Cable and Windows Listen Mode (no VoiceMeeter required).
 
-1. **Virtual Input**  
-   We force Windows to treat the audio device as a 7.1 Home Theater system.
+1. **Virtual Audio Device (VB-Cable)**  
+   Windows is configured to treat VB-Cable as a 7.1 Home Theater device.
 
-2. **Channel Interception**  
-   The app captures individual channel data (Rear Left, Rear Right, Side Left, Side Right).
+2. **Listen Mode Routing**  
+   Windows “Listen to this device” is enabled so the 7.1 audio sent to VB-Cable is forwarded to your physical headphones.
 
-3. **Vector Math Engine**  
+3. **Channel Interception (WASAPI Loopback)**  
+   The app captures the raw 7.1 channel data from VB-Cable using `WasapiLoopbackCapture`.
+
+4. **Vector Math Engine**  
    Using custom-tuned multipliers, the app calculates the sound direction and plots it on a 2D radar overlay.
 
 ---
 
-##  Architecture
+## Architecture
 
 ```mermaid
 graph TD
     A[Game / PUBG] -->|Outputs 7.1 Audio| B(Windows Audio Engine)
-    B -->|Sent to Default Device| C{VoiceMeeter Banana}
-    C -->|Downmix to Stereo| D[Physical Headphones]
-    C -.->|Raw 7.1 Loopback| E[AudioRadar App]
-    E -->|WASAPI Capture| F[Vector Math Engine]
+    B -->|Sent to Default Device| C[VB-Cable Virtual Device]
+    C -->|Listen Mode| D[Physical Headphones]
+    C -.->|7.1 Loopback Capture| E[AudioRadar App]
+    E -->|WASAPI| F[Vector Math Engine]
     F -->|Calculate X/Y| G[WPF Transparent Overlay]
 ```
 
 ---
 
-##  Prerequisites
+## Prerequisites
 
 - **OS:** Windows 10 / 11  
 - **Runtime:** .NET 6.0 or .NET 8.0  
-- **Audio Driver:** VoiceMeeter Banana (Required to spoof 7.1 audio)  
+- **Audio Driver:** VB-Cable (VB-Audio Virtual Cable)  
 
 ---
 
-##  Setup Guide (Important)
+## Setup Guide (Important)
 
-For this software to work correctly, you must configure audio routing properly.
+### 1️⃣ Install VB-Cable
 
-### 1️⃣ Configure VoiceMeeter Banana
-
-- Install VoiceMeeter Banana and restart your PC.
-- Open VoiceMeeter.
-- Set **Hardware Out A1** to your physical headphones.
-- In the **Virtual Inputs (Voicemeeter VAIO)** section, ensure button **A1** is green (enabled).
-- In the **Master Section**, change the "Normal Mode" button for A1 to **Mix Down A**.  
-  This ensures 7.1 audio is downmixed to stereo for your headphones.
-
----
-
-### 2️⃣ Configure Windows Sound
-
+- Install VB-Cable driver.
+- Restart your PC.
 - Open Windows Sound Settings (`mmsys.cpl`).
-- Set **VoiceMeeter Input (VB-Audio VoiceMeeter VAIO)** as your Default Device.
-- Right-click it → **Configure Speakers**.
+
+---
+
+### 2️⃣ Configure VB-Cable as 7.1
+
+- Set **CABLE Input (VB-Audio Virtual Cable)** as your Default Playback Device.
+- Right-click → **Configure Speakers**.
 - Select **7.1 Surround** and complete the wizard.
 
 ---
 
-### 3️⃣ Launch AudioRadar
+### 3️⃣ Enable Listen Mode
+
+- Go to the **Recording** tab in Sound Settings.
+- Find **CABLE Output**.
+- Right-click → **Properties**.
+- Open the **Listen** tab.
+- Enable **Listen to this device**.
+- Select your physical headphones as the playback device.
+
+This routes the 7.1 signal to your headphones while preserving the multi-channel stream.
+
+---
+
+### 4️⃣ Launch AudioRadar
 
 - Run the application.
 - A transparent radar overlay will appear in the top-right corner.
@@ -87,7 +97,7 @@ For this software to work correctly, you must configure audio routing properly.
 
 ---
 
-##  How The Math Works
+## How The Math Works
 
 The core logic resides in `MainWindow.xaml.cs`.
 
@@ -101,14 +111,14 @@ float rightPush = fr + (br * 3.0f) + (sr * 4.0f);
 ### Channel Weights
 
 - **Front (FL / FR):** 1.0x (Baseline)
-- **Rear (BL / BR):** 3.0x Boost (Distinguishes from Front)
-- **Side (SL / SR):** 4.0x Boost (Ensures strong horizontal movement)
+- **Rear (BL / BR):** 3.0x Boost
+- **Side (SL / SR):** 4.0x Boost
 
 This weighted vector system compensates for Windows downmix behavior and channel energy imbalance.
 
 ---
 
-##  Disclaimer & Risk Warning
+## Disclaimer & Risk Warning
 
 Use at your own risk.
 
@@ -117,7 +127,7 @@ This software:
 - Does NOT inspect game memory
 - Does NOT inject code into games
 
-However, anti-cheat systems (e.g., BattlEye, Ricochet, etc.) may flag transparent overlays interacting with game sensory data.
+However, anti-cheat systems may flag unknown overlays interacting with game sensory data.
 
 ### Recommended Usage
 
@@ -129,7 +139,7 @@ Avoid use in ranked or competitive multiplayer matches where external assistance
 
 ---
 
-##  License
+## License
 
 This project is open-source.
 
@@ -137,12 +147,12 @@ Feel free to fork, modify, and improve.
 
 ---
 
-##  Future Improvements
+## Future Improvements
 
 - Adjustable sensitivity slider
 - Dynamic color shifting based on loudness
 - Dot size scaling with intensity
-- True vector-based spatial mapping system
+- True vector-based spatial mapping
 - UI configuration panel
 
 ---

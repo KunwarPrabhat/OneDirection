@@ -61,21 +61,6 @@
                 Name="RadarCanvas"
                 Width="300"
                 Height="300">
-                <Ellipse
-                    Name="SoundDot"
-                    Canvas.Left="138"
-                    Canvas.Top="138"
-                    Width="24"
-                    Height="24"
-                    Fill="#FF0000"
-                    Opacity="0.9">
-                    <Ellipse.Effect>
-                        <DropShadowEffect
-                            BlurRadius="15"
-                            ShadowDepth="0"
-                            Color="Red" />
-                    </Ellipse.Effect>
-                </Ellipse>
             </Canvas>
         </Grid>
     </Viewbox>

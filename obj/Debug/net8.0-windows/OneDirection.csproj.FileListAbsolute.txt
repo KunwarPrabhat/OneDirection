@@ -27,3 +27,5 @@ C:\Users\rkpra\Desktop\TinyProj\OneDirection\OneDirection\obj\Debug\net8.0-windo
 C:\Users\rkpra\Desktop\TinyProj\OneDirection\OneDirection\obj\Debug\net8.0-windows\OneDirection.genruntimeconfig.cache
 C:\Users\rkpra\Desktop\TinyProj\OneDirection\OneDirection\obj\Debug\net8.0-windows\ref\OneDirection.dll
 C:\Users\rkpra\Desktop\TinyProj\OneDirection\OneDirection\obj\Debug\net8.0-windows\OneDirection.sourcelink.json
+C:\Users\rkpra\Desktop\TinyProj\OneDirection\OneDirection\obj\Debug\net8.0-windows\src\UI\SettingsWindow.baml
+C:\Users\rkpra\Desktop\TinyProj\OneDirection\OneDirection\obj\Debug\net8.0-windows\src\UI\SettingsWindow.g.cs
