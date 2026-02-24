@@ -35,47 +35,38 @@ namespace AudioVisualizerOverlay.src.Visualization
         public RadarVisualizer(Canvas radarCanvas, int maxBalls)
         {
             _radarCanvas = radarCanvas ?? throw new ArgumentNullException(nameof(radarCanvas));
-            _maxBalls = maxBalls;
+            _maxBalls = 1; // Force to 1 single ball
             _dots = new List<RadarDot>();
 
-            for (int i = 0; i < 7; i++) // 7 dots for 7 independent spatial zones
+            var element = new Ellipse
             {
-                var element = new Ellipse
+                Width = 24,
+                Height = 24,
+                Fill = new SolidColorBrush(Colors.Red),
+                Opacity = DEFAULT_OPACITY_INACTIVE,
+                Effect = new DropShadowEffect
                 {
-                    Width = 24,
-                    Height = 24,
-                    Fill = new SolidColorBrush(Colors.Red),
-                    Opacity = DEFAULT_OPACITY_INACTIVE,
-                    Effect = new DropShadowEffect
-                    {
-                        BlurRadius = 15,
-                        ShadowDepth = 0,
-                        Color = Colors.Red
-                    }
-                };
+                    BlurRadius = 15,
+                    ShadowDepth = 0,
+                    Color = Colors.Red
+                }
+            };
 
-                _radarCanvas.Children.Add(element);
-                _dots.Add(new RadarDot { Element = element });
-            }
+            _radarCanvas.Children.Add(element);
+            _dots.Add(new RadarDot { Element = element });
         }
 
         public void UpdateRadarDisplay(IEnumerable<AudioSource> sources)
         {
-            var sourceList = sources.OrderByDescending(s => s.Loudness).Take(_maxBalls).ToList();
+            var topSource = sources.OrderByDescending(s => s.Loudness).FirstOrDefault();
 
-            // First, hide all dots initially
-            foreach (var dot in _dots)
+            if (topSource != null)
             {
-                dot.Element.Opacity = DEFAULT_OPACITY_INACTIVE;
+                UpdateDot(_dots[0], topSource.XForce, topSource.YForce, topSource.Loudness);
             }
-
-            // Update only the loud active dots
-            foreach (var source in sourceList)
+            else
             {
-                if (source.Id >= 0 && source.Id < _dots.Count)
-                {
-                    UpdateDot(_dots[source.Id], source.XForce, source.YForce, source.Loudness);
-                }
+                _dots[0].Element.Opacity = DEFAULT_OPACITY_INACTIVE;
             }
         }
 

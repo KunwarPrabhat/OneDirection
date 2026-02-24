@@ -138,8 +138,8 @@ namespace AudioVisualizerOverlay.src.Audio
             };
 
             var sources = new List<AudioSource>();
-            float sBoost = 12.0f; // Adjusted sensitivity multiplier
-            float noiseThreshold = 0.00002f;
+            float sBoost = 35.0f; // Adjusted sensitivity multiplier (increased drastically)
+            float noiseThreshold = 0.00001f;
 
             // 3. Find local peaks and calculate exact interpolated vector
             for (int i = 0; i < 7; i++)
